@@ -1,6 +1,7 @@
 import os
 import time
 import math
+import hmac
 import duckdb
 import streamlit as st
 
@@ -15,7 +16,7 @@ st.set_page_config(
     layout="wide",
 )
 
-APP_VERSION = "v17.0-2026-09-02"
+APP_VERSION = "v22.0-2026-09-02"
 ARQUIVO_CSV = "gsan_int_gis_gnm_1.100.148.csv"
 PASTA_DADOS = "data"
 ARQUIVO_PARQUET = os.path.join(
@@ -33,22 +34,369 @@ os.makedirs(PASTA_DADOS, exist_ok=True)
 st.markdown(
     """
     <style>
+    /* ======================================================
+       V22 - BLACK PIANO + LOGIN
+       ====================================================== */
+
+    html, body, [class*="css"] {
+        color: #F4F4F4;
+    }
+
+    .stApp {
+        background:
+            radial-gradient(circle at 15% 10%, rgba(255,255,255,0.045), transparent 28%),
+            radial-gradient(circle at 85% 0%, rgba(255,255,255,0.025), transparent 22%),
+            linear-gradient(180deg, #050505 0%, #090909 42%, #030303 100%);
+    }
+
+    [data-testid="stAppViewContainer"] {
+        background: transparent;
+    }
+
+    [data-testid="stHeader"] {
+        background: rgba(0,0,0,0.80);
+        border-bottom: 1px solid rgba(255,255,255,0.08);
+        backdrop-filter: blur(12px);
+    }
+
     .block-container {
         padding-top: 3.5rem;
         padding-bottom: 2rem;
+        max-width: 1600px;
+    }
+
+    /* SIDEBAR */
+    [data-testid="stSidebar"] {
+        background:
+            linear-gradient(180deg, #050505 0%, #0A0A0A 45%, #020202 100%);
+        border-right: 1px solid rgba(255,255,255,0.10);
+        box-shadow: 10px 0 24px rgba(0,0,0,0.35);
+    }
+
+    [data-testid="stSidebar"] * {
+        color: #F2F2F2;
+    }
+
+    /* TÍTULOS */
+    h1, h2, h3 {
+        color: #FFFFFF !important;
+        letter-spacing: -0.02em;
+    }
+
+    h1 {
+        text-shadow: 0 2px 18px rgba(255,255,255,0.06);
+    }
+
+    /* CARDS / MÉTRICAS */
+    [data-testid="stMetric"] {
+        background:
+            linear-gradient(145deg, rgba(28,28,28,0.98), rgba(5,5,5,0.98));
+        border: 1px solid rgba(255,255,255,0.10);
+        border-radius: 14px;
+        padding: 14px 16px;
+        box-shadow:
+            inset 0 1px 0 rgba(255,255,255,0.06),
+            0 10px 25px rgba(0,0,0,0.26);
+    }
+
+    [data-testid="stMetricLabel"] {
+        color: #BDBDBD !important;
+        font-weight: 600;
     }
 
     [data-testid="stMetricValue"] {
         font-size: 1.55rem;
+        color: #FFFFFF !important;
+        font-weight: 700;
     }
 
+    /* RADIOS / NAVEGAÇÃO */
     div[data-testid="stRadio"] > div {
-        gap: 1rem;
+        gap: 0.65rem;
+    }
+
+    div[data-testid="stRadio"] label {
+        background: linear-gradient(180deg, #171717, #0A0A0A);
+        border: 1px solid rgba(255,255,255,0.10);
+        border-radius: 10px;
+        padding: 7px 12px;
+        box-shadow: inset 0 1px 0 rgba(255,255,255,0.04);
+    }
+
+    /* INPUTS */
+    [data-baseweb="input"] > div,
+    [data-baseweb="select"] > div,
+    [data-baseweb="textarea"] > div {
+        background: #0B0B0B !important;
+        border-color: rgba(255,255,255,0.12) !important;
+        color: #FFFFFF !important;
+    }
+
+    input, textarea {
+        color: #FFFFFF !important;
+    }
+
+    /* MULTISELECT TAGS */
+    [data-baseweb="tag"] {
+        background: #1C1C1C !important;
+        color: #FFFFFF !important;
+        border: 1px solid rgba(255,255,255,0.12);
+    }
+
+    /* BOTÕES */
+    .stButton > button,
+    .stDownloadButton > button {
+        background: linear-gradient(180deg, #202020 0%, #080808 100%);
+        color: #FFFFFF;
+        border: 1px solid rgba(255,255,255,0.14);
+        border-radius: 10px;
+        box-shadow:
+            inset 0 1px 0 rgba(255,255,255,0.08),
+            0 6px 16px rgba(0,0,0,0.28);
+        transition: 0.15s ease-in-out;
+    }
+
+    .stButton > button:hover,
+    .stDownloadButton > button:hover {
+        border-color: rgba(255,255,255,0.30);
+        transform: translateY(-1px);
+        background: linear-gradient(180deg, #2A2A2A 0%, #0D0D0D 100%);
+    }
+
+    /* EXPANDERS */
+    [data-testid="stExpander"] {
+        background: linear-gradient(180deg, rgba(18,18,18,0.96), rgba(7,7,7,0.96));
+        border: 1px solid rgba(255,255,255,0.09);
+        border-radius: 12px;
+    }
+
+    /* DATAFRAMES */
+    [data-testid="stDataFrame"] {
+        border: 1px solid rgba(255,255,255,0.09);
+        border-radius: 12px;
+        overflow: hidden;
+        box-shadow: 0 10px 24px rgba(0,0,0,0.20);
+    }
+
+    /* ALERTAS */
+    [data-testid="stAlert"] {
+        border-radius: 12px;
+        border: 1px solid rgba(255,255,255,0.10);
+        background: rgba(18,18,18,0.92);
+    }
+
+    /* DIVISORES */
+    hr {
+        border-color: rgba(255,255,255,0.08) !important;
+    }
+
+    /* CAPTIONS */
+    .stCaption, [data-testid="stCaptionContainer"] {
+        color: #A9A9A9 !important;
+    }
+
+    /* SCROLLBAR */
+    ::-webkit-scrollbar {
+        width: 10px;
+        height: 10px;
+    }
+
+    ::-webkit-scrollbar-track {
+        background: #050505;
+    }
+
+    ::-webkit-scrollbar-thumb {
+        background: #262626;
+        border-radius: 10px;
+        border: 2px solid #050505;
+    }
+
+    ::-webkit-scrollbar-thumb:hover {
+        background: #343434;
+    }
+
+    /* LOGIN */
+    .login-shell {
+        max-width: 460px;
+        margin: 7vh auto 1rem auto;
+        padding: 34px 34px 26px 34px;
+        background:
+            linear-gradient(145deg, rgba(28,28,28,0.98), rgba(4,4,4,0.99));
+        border: 1px solid rgba(255,255,255,0.11);
+        border-radius: 20px;
+        box-shadow:
+            inset 0 1px 0 rgba(255,255,255,0.07),
+            0 28px 70px rgba(0,0,0,0.52);
+        text-align: center;
+    }
+
+    .login-brand {
+        font-size: 0.82rem;
+        font-weight: 700;
+        letter-spacing: 0.18em;
+        color: #9B9B9B;
+        margin-bottom: 10px;
+    }
+
+    .login-title {
+        font-size: 2rem;
+        font-weight: 800;
+        color: #FFFFFF;
+        letter-spacing: -0.03em;
+        margin-bottom: 6px;
+    }
+
+    .login-subtitle {
+        color: #A8A8A8;
+        font-size: 0.95rem;
+        margin-bottom: 2px;
+    }
+
+    .login-footer {
+        color: #777777;
+        font-size: 0.78rem;
+        text-align: center;
+        margin-top: 16px;
     }
     </style>
     """,
     unsafe_allow_html=True,
 )
+
+
+# ==========================================================
+# AUTENTICAÇÃO - USUÁRIO/SENHA ÚNICOS DA EQUIPE
+# ==========================================================
+
+def obter_credencial_auth(nome):
+    """
+    Ordem de leitura:
+    1) Streamlit Secrets: [auth] username / password
+    2) Variáveis de ambiente: AUTH_USERNAME / AUTH_PASSWORD
+    """
+    try:
+        bloco_auth = st.secrets.get("auth", {})
+        valor = bloco_auth.get(nome)
+        if valor is not None and str(valor).strip():
+            return str(valor)
+    except Exception:
+        pass
+
+    env_map = {
+        "username": "AUTH_USERNAME",
+        "password": "AUTH_PASSWORD",
+    }
+
+    valor_env = os.getenv(env_map[nome])
+    if valor_env is not None and str(valor_env).strip():
+        return str(valor_env)
+
+    return None
+
+
+def autenticar():
+    usuario_correto = obter_credencial_auth("username")
+    senha_correta = obter_credencial_auth("password")
+
+    if not usuario_correto or not senha_correta:
+        st.markdown(
+            """
+            <div class="login-shell">
+                <div class="login-brand">ENORSUL • AQUA PERNAMBUCO</div>
+                <div class="login-title">Acesso ao Painel</div>
+                <div class="login-subtitle">
+                    Credenciais ainda não configuradas.
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+        st.error(
+            "Configure o usuário e a senha nos Secrets do Streamlit Cloud "
+            "antes de liberar o painel."
+        )
+        st.code(
+            '[auth]\nusername = "enorsul"\npassword = "SUA_SENHA_FORTE_AQUI"',
+            language="toml",
+        )
+        st.stop()
+
+    if st.session_state.get("autenticado", False):
+        return True
+
+    st.markdown(
+        """
+        <div class="login-shell">
+            <div class="login-brand">ENORSUL • AQUA PERNAMBUCO</div>
+            <div class="login-title">Gestão Comercial</div>
+            <div class="login-subtitle">
+                Informe as credenciais da equipe para acessar o painel.
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    centro_esq, centro, centro_dir = st.columns([1, 1.05, 1])
+
+    with centro:
+        with st.form("form_login", clear_on_submit=False):
+            usuario = st.text_input(
+                "Usuário",
+                placeholder="Digite o usuário",
+                autocomplete="username",
+            )
+
+            senha = st.text_input(
+                "Senha",
+                type="password",
+                placeholder="Digite a senha",
+                autocomplete="current-password",
+            )
+
+            entrar = st.form_submit_button(
+                "Entrar",
+                use_container_width=True,
+            )
+
+        if entrar:
+            usuario_ok = hmac.compare_digest(
+                str(usuario).strip(),
+                usuario_correto,
+            )
+            senha_ok = hmac.compare_digest(
+                str(senha),
+                senha_correta,
+            )
+
+            if usuario_ok and senha_ok:
+                st.session_state["autenticado"] = True
+                st.session_state["usuario_logado"] = usuario_correto
+                st.rerun()
+            else:
+                st.error("Usuário ou senha inválidos.")
+
+    st.markdown(
+        '<div class="login-footer">Acesso restrito à equipe autorizada.</div>',
+        unsafe_allow_html=True,
+    )
+
+    st.stop()
+
+
+autenticar()
+
+# Botão de saída disponível durante toda a sessão autenticada.
+with st.sidebar:
+    st.caption("🔐 Acesso autenticado")
+    if st.button(
+        "Sair",
+        use_container_width=True,
+        key="logout_global_v22",
+    ):
+        st.session_state["autenticado"] = False
+        st.session_state.pop("usuario_logado", None)
+        st.rerun()
 
 
 # ==========================================================
@@ -3035,6 +3383,29 @@ if area == "💧 HIDRÔMETROS":
             )
 
 
+        st.divider()
+        st.markdown("**🎯 Capacidade Operacional**")
+
+        qtd_trocas = st.number_input(
+            "Quantidade de trocas desejada",
+            min_value=1,
+            max_value=50000,
+            value=500,
+            step=100,
+            key="parametro_qtd_trocas_v20",
+            help=(
+                "Premissa de simulação. Não limita o painel. "
+                "Os cards e tabelas gerais continuam mostrando toda a base filtrada; "
+                "somente o cenário de capacidade usa as melhores oportunidades "
+                "até a quantidade informada."
+            ),
+        )
+
+        st.caption(
+            "Premissa de simulação — não limita as demais visões."
+        )
+
+
     where_hd = montar_where(
         condicoes_hd
     )
@@ -3180,6 +3551,136 @@ if area == "💧 HIDRÔMETROS":
             "de priorização. Não representam recuperação "
             "garantida após a substituição."
         )
+
+
+        # ======================================================
+        # V20 - CENÁRIO DA CAPACIDADE OPERACIONAL - HIDRÔMETROS
+        # ======================================================
+        st.markdown(
+            f"**🎯 Cenário da capacidade: {int(qtd_trocas):,} trocas**".replace(",", ".")
+        )
+        st.caption(
+            "Resultado das melhores oportunidades dentro dos filtros atuais. "
+            "A quantidade é apenas uma premissa de simulação e não limita o painel."
+        )
+
+        where_sim_hd = montar_where(
+            condicoes_hd
+            + [
+                "("
+                "COALESCE(GANHO_TOTAL_ESTIMADO, 0) > 0 "
+                "OR COALESCE(GAP_MEDICAO_M3, 0) > 0"
+                ")"
+            ]
+        )
+
+        sim_hd = consultar_linha(
+            f"""
+            {cte_hidrometria()}
+
+            , selecionados AS (
+                SELECT *
+                FROM hidrometria
+                {where_sim_hd}
+                ORDER BY
+                    CASE PRIORIDADE_RECUPERACAO
+                        WHEN 'MUITO ALTA' THEN 1
+                        WHEN 'ALTA' THEN 2
+                        WHEN 'MÉDIA' THEN 3
+                        WHEN 'BAIXA' THEN 4
+                        ELSE 5
+                    END,
+                    SCORE_RECUPERACAO DESC,
+                    GANHO_TOTAL_ESTIMADO DESC,
+                    GAP_MEDICAO_M3 DESC
+                LIMIT {int(qtd_trocas)}
+            )
+
+            SELECT
+                COUNT(*) AS QTD,
+                SUM(COALESCE(GAP_MEDICAO_M3, 0)) AS VOLUME,
+                SUM(COALESCE(GANHO_TOTAL_ESTIMADO, 0)) AS GANHO,
+                AVG(COALESCE(GANHO_TOTAL_ESTIMADO, 0)) AS GANHO_MEDIO,
+                SUM(CASE WHEN PRIORIDADE_RECUPERACAO = 'MUITO ALTA' THEN 1 ELSE 0 END) AS MUITO_ALTA,
+                SUM(CASE WHEN PRIORIDADE_RECUPERACAO = 'ALTA' THEN 1 ELSE 0 END) AS ALTA
+            FROM selecionados
+            """,
+            VERSAO,
+        )
+
+        s1, s2, s3, s4, s5, s6 = st.columns(6)
+
+        s1.metric("Trocas Selecionadas", formatar_inteiro(sim_hd[0]))
+        s2.metric("Volume Estimado / mês", formatar_volume(sim_hd[1]))
+        s3.metric("Ganho Estimado / mês", formatar_moeda(sim_hd[2]))
+        s4.metric("Ganho Médio / troca", formatar_moeda(sim_hd[3]))
+        s5.metric("Muito Alta", formatar_inteiro(sim_hd[4]))
+        s6.metric("Alta", formatar_inteiro(sim_hd[5]))
+
+        st.caption(
+            "Seleção recomendada = melhores oportunidades dentro dos filtros atuais. "
+            "O resultado é estimado e não representa recuperação garantida."
+        )
+
+        with st.expander("📋 Ver seleção recomendada para a capacidade informada", expanded=False):
+            limite_sim_hd = min(int(qtd_trocas), 3000)
+
+            df_sim_hd = consultar_df(
+                f"""
+                {cte_hidrometria()}
+
+                SELECT
+                    MATRICULA AS "Matrícula",
+                    GNM AS "GNM",
+                    LOCALIDADE AS "Localidade",
+                    MUNICIPIO AS "Município",
+                    BAIRRO AS "Bairro",
+                    PERFIL AS "Perfil",
+                    CATEGORIA AS "Categoria",
+                    ECONOMIAS AS "Economias",
+                    PRIORIDADE_RECUPERACAO AS "Prioridade de Recuperação",
+                    SCORE_RECUPERACAO AS "Pontuação",
+                    ROUND(GAP_MEDICAO_M3, 1) AS "Volume Estimado (m³/mês)",
+                    ROUND(GANHO_TOTAL_ESTIMADO, 2) AS "Ganho Estimado (R$/mês)",
+                    MOTIVO_RECUPERACAO_HD AS "Motivo da Prioridade",
+                    PRIORIDADE_TECNICA AS "Prioridade Técnica",
+                    MOTIVO_TECNICO AS "Motivo Técnico"
+                FROM hidrometria
+                {where_sim_hd}
+                ORDER BY
+                    CASE PRIORIDADE_RECUPERACAO
+                        WHEN 'MUITO ALTA' THEN 1
+                        WHEN 'ALTA' THEN 2
+                        WHEN 'MÉDIA' THEN 3
+                        WHEN 'BAIXA' THEN 4
+                        ELSE 5
+                    END,
+                    SCORE_RECUPERACAO DESC,
+                    GANHO_TOTAL_ESTIMADO DESC,
+                    GAP_MEDICAO_M3 DESC
+                LIMIT {limite_sim_hd}
+                """,
+                VERSAO,
+            )
+
+            exibir_dataframe(
+                df_sim_hd,
+                use_container_width=True,
+                hide_index=True,
+            )
+
+            st.download_button(
+                "📥 Exportar seleção recomendada de trocas",
+                df_sim_hd.to_csv(index=False).encode("utf-8-sig"),
+                "selecao_recomendada_trocas.csv",
+                "text/csv",
+            )
+
+            if int(qtd_trocas) > 3000:
+                st.caption(
+                    "A seleção total considera a quantidade informada. "
+                    "A tabela é limitada às 3.000 primeiras linhas para manter o painel rápido."
+                )
 
 
         st.subheader(
@@ -3413,6 +3914,78 @@ if area == "💧 HIDRÔMETROS":
 
         exibir_dataframe(
             df,
+            use_container_width=True,
+            hide_index=True,
+        )
+
+
+        st.markdown(
+            f"**🎯 Distribuição das {int(qtd_trocas):,} melhores trocas por região**".replace(",", ".")
+        )
+        st.caption(
+            "Esta tabela usa a capacidade operacional informada no menu lateral, "
+            "mas não altera a tabela geral acima."
+        )
+
+        where_sim_regiao = montar_where(
+            condicoes_hd
+            + [
+                "("
+                "COALESCE(GANHO_TOTAL_ESTIMADO, 0) > 0 "
+                "OR COALESCE(GAP_MEDICAO_M3, 0) > 0"
+                ")"
+            ]
+        )
+
+        df_cap_regiao = consultar_df(
+            f"""
+            {cte_hidrometria()}
+
+            , selecionados AS (
+                SELECT *
+                FROM hidrometria
+                {where_sim_regiao}
+                ORDER BY
+                    CASE PRIORIDADE_RECUPERACAO
+                        WHEN 'MUITO ALTA' THEN 1
+                        WHEN 'ALTA' THEN 2
+                        WHEN 'MÉDIA' THEN 3
+                        WHEN 'BAIXA' THEN 4
+                        ELSE 5
+                    END,
+                    SCORE_RECUPERACAO DESC,
+                    GANHO_TOTAL_ESTIMADO DESC,
+                    GAP_MEDICAO_M3 DESC
+                LIMIT {int(qtd_trocas)}
+            )
+
+            SELECT
+                GNM AS "GNM",
+                LOCALIDADE AS "Localidade",
+                MUNICIPIO AS "Município",
+                COUNT(*) AS "Trocas Selecionadas",
+                ROUND(SUM(COALESCE(GAP_MEDICAO_M3, 0)), 1)
+                    AS "Volume Estimado (m³/mês)",
+                ROUND(SUM(COALESCE(GANHO_TOTAL_ESTIMADO, 0)), 2)
+                    AS "Ganho Estimado (R$/mês)",
+                SUM(CASE WHEN PRIORIDADE_RECUPERACAO = 'MUITO ALTA' THEN 1 ELSE 0 END)
+                    AS "Muito Alta",
+                SUM(CASE WHEN PRIORIDADE_RECUPERACAO = 'ALTA' THEN 1 ELSE 0 END)
+                    AS "Alta"
+            FROM selecionados
+            GROUP BY
+                GNM,
+                LOCALIDADE,
+                MUNICIPIO
+            ORDER BY
+                "Trocas Selecionadas" DESC,
+                "Ganho Estimado (R$/mês)" DESC
+            """,
+            VERSAO,
+        )
+
+        exibir_dataframe(
+            df_cap_regiao,
             use_container_width=True,
             hide_index=True,
         )
@@ -4565,6 +5138,29 @@ else:
                 )
 
 
+        st.divider()
+        st.markdown("**🎯 Capacidade Operacional**")
+
+        qtd_fiscalizacoes = st.number_input(
+            "Quantidade de fiscalizações desejada",
+            min_value=1,
+            max_value=50000,
+            value=500,
+            step=100,
+            key="parametro_qtd_fiscalizacoes_v20",
+            help=(
+                "Premissa de simulação. Não limita o painel. "
+                "Os cards e tabelas gerais continuam mostrando toda a base filtrada; "
+                "somente o cenário de capacidade usa os melhores casos "
+                "até a quantidade informada."
+            ),
+        )
+
+        st.caption(
+            "Premissa de simulação — não limita as demais visões."
+        )
+
+
     where_rec = montar_where(
         condicoes_rec
     )
@@ -4707,6 +5303,126 @@ else:
             "para fiscalização e recuperação da ligação. "
             "Não representa confirmação automática de fraude."
         )
+
+
+        # ======================================================
+        # V20 - CENÁRIO DA CAPACIDADE OPERACIONAL - FISCALIZAÇÃO
+        # ======================================================
+        st.markdown(
+            f"**🎯 Cenário da capacidade: {int(qtd_fiscalizacoes):,} fiscalizações**".replace(",", ".")
+        )
+        st.caption(
+            "Resultado dos melhores casos dentro dos filtros atuais. "
+            "A quantidade é apenas uma premissa de simulação e não limita o painel."
+        )
+
+        sim_rec = consultar_linha(
+            f"""
+            {cte_recuperacao()}
+
+            , selecionados AS (
+                SELECT *
+                FROM recuperacao
+                {where_rec}
+                ORDER BY
+                    CASE PRIORIDADE_RECUPERACAO
+                        WHEN 'CRÍTICA' THEN 1
+                        WHEN 'ALTA' THEN 2
+                        WHEN 'MÉDIA' THEN 3
+                        ELSE 4
+                    END,
+                    SCORE_FISCALIZACAO DESC,
+                    INCREMENTO_ESTIMADO_RS DESC,
+                    INCREMENTO_ESTIMADO_M3 DESC
+                LIMIT {int(qtd_fiscalizacoes)}
+            )
+
+            SELECT
+                COUNT(*) AS QTD,
+                SUM(CASE WHEN PRIORIDADE_RECUPERACAO = 'CRÍTICA' THEN 1 ELSE 0 END) AS CRITICA,
+                SUM(CASE WHEN PRIORIDADE_RECUPERACAO = 'ALTA' THEN 1 ELSE 0 END) AS ALTA,
+                SUM(COALESCE(INCREMENTO_ESTIMADO_M3, 0)) AS VOLUME,
+                SUM(COALESCE(INCREMENTO_ESTIMADO_RS, 0)) AS GANHO,
+                AVG(COALESCE(INCREMENTO_ESTIMADO_RS, 0)) AS GANHO_MEDIO
+            FROM selecionados
+            """,
+            VERSAO,
+        )
+
+        r1, r2, r3, r4, r5, r6 = st.columns(6)
+
+        r1.metric("Fiscalizações Selecionadas", formatar_inteiro(sim_rec[0]))
+        r2.metric("Prioridade Crítica", formatar_inteiro(sim_rec[1]))
+        r3.metric("Prioridade Alta", formatar_inteiro(sim_rec[2]))
+        r4.metric("Volume Estimado / mês", formatar_volume(sim_rec[3]))
+        r5.metric("Incremento Estimado / mês", formatar_moeda(sim_rec[4]))
+        r6.metric("Média / fiscalização", formatar_moeda(sim_rec[5]))
+
+        st.caption(
+            "Seleção recomendada = melhores casos dentro dos filtros atuais. "
+            "Trata-se de uma priorização para fiscalização, não de confirmação de irregularidade."
+        )
+
+        with st.expander("📋 Ver seleção recomendada para a capacidade informada", expanded=False):
+            limite_sim_rec = min(int(qtd_fiscalizacoes), 3000)
+
+            df_sim_rec = consultar_df(
+                f"""
+                {cte_recuperacao()}
+
+                SELECT
+                    MATRICULA AS "Matrícula",
+                    SITUACAO AS "Situação Água",
+                    SITUACAO_ESGOTO AS "Situação Esgoto",
+                    GNM AS "GNM",
+                    LOCALIDADE AS "Localidade",
+                    MUNICIPIO AS "Município",
+                    BAIRRO AS "Bairro",
+                    PERFIL AS "Perfil",
+                    CATEGORIA AS "Categoria",
+                    ECONOMIAS AS "Economias",
+                    STATUS_HD AS "Hidrômetro",
+                    OCORRENCIA_FISCAL AS "Indício / Ocorrência",
+                    MOTIVO_RECUPERACAO AS "Motivo",
+                    SCORE_FISCALIZACAO AS "Pontuação",
+                    PRIORIDADE_RECUPERACAO AS "Prioridade",
+                    ROUND(INCREMENTO_ESTIMADO_M3, 1) AS "Volume Estimado (m³/mês)",
+                    ROUND(INCREMENTO_ESTIMADO_RS, 2) AS "Incremento Estimado (R$/mês)"
+                FROM recuperacao
+                {where_rec}
+                ORDER BY
+                    CASE PRIORIDADE_RECUPERACAO
+                        WHEN 'CRÍTICA' THEN 1
+                        WHEN 'ALTA' THEN 2
+                        WHEN 'MÉDIA' THEN 3
+                        ELSE 4
+                    END,
+                    SCORE_FISCALIZACAO DESC,
+                    INCREMENTO_ESTIMADO_RS DESC,
+                    INCREMENTO_ESTIMADO_M3 DESC
+                LIMIT {limite_sim_rec}
+                """,
+                VERSAO,
+            )
+
+            exibir_dataframe(
+                df_sim_rec,
+                use_container_width=True,
+                hide_index=True,
+            )
+
+            st.download_button(
+                "📥 Exportar seleção recomendada de fiscalizações",
+                df_sim_rec.to_csv(index=False).encode("utf-8-sig"),
+                "selecao_recomendada_fiscalizacoes.csv",
+                "text/csv",
+            )
+
+            if int(qtd_fiscalizacoes) > 3000:
+                st.caption(
+                    "A seleção total considera a quantidade informada. "
+                    "A tabela é limitada às 3.000 primeiras linhas para manter o painel rápido."
+                )
 
 
 # ==========================================================
