@@ -2,6 +2,10 @@ import os
 import time
 import math
 import hmac
+import hashlib
+import datetime as dt
+import urllib.parse
+import urllib.request
 import duckdb
 import streamlit as st
 
@@ -16,7 +20,7 @@ st.set_page_config(
     layout="wide",
 )
 
-APP_VERSION = "v23.0-2026-09-03"
+APP_VERSION = "v24.0-2026-09-03"
 PASTA_DADOS = "data"
 
 ARQUIVO_RMR = os.path.join(PASTA_DADOS, "RMR.parquet")
@@ -32,6 +36,161 @@ os.makedirs(PASTA_DADOS, exist_ok=True)
 
 
 # ==========================================================
+# CLOUDFLARE R2 - DOWNLOAD PRIVADO DAS BASES
+# ==========================================================
+
+def obter_config_r2():
+    """Retorna a configuração privada do R2 a partir do Streamlit Secrets."""
+    try:
+        bloco = st.secrets.get("r2", {})
+    except Exception:
+        bloco = {}
+
+    campos = (
+        "access_key_id",
+        "secret_access_key",
+        "endpoint_url",
+        "bucket",
+    )
+
+    config = {campo: str(bloco.get(campo, "")).strip() for campo in campos}
+
+    if not all(config.values()):
+        return None
+
+    config["endpoint_url"] = config["endpoint_url"].rstrip("/")
+    return config
+
+
+def _assinar_chave_r2(chave, mensagem):
+    return hmac.new(chave, mensagem.encode("utf-8"), hashlib.sha256).digest()
+
+
+def baixar_objeto_r2(nome_objeto, destino):
+    """Baixa um objeto privado do Cloudflare R2 usando AWS Signature V4."""
+    config = obter_config_r2()
+
+    if not config:
+        raise RuntimeError(
+            "As credenciais do Cloudflare R2 não estão configuradas nos Secrets do Streamlit."
+        )
+
+    endpoint = config["endpoint_url"]
+    bucket = config["bucket"]
+    access_key = config["access_key_id"]
+    secret_key = config["secret_access_key"]
+
+    parsed = urllib.parse.urlparse(endpoint)
+    host = parsed.netloc
+
+    caminho_objeto = "/" + "/".join(
+        urllib.parse.quote(parte, safe="-_.~")
+        for parte in (bucket, nome_objeto)
+    )
+    url = f"{endpoint}{caminho_objeto}"
+
+    agora = dt.datetime.now(dt.timezone.utc)
+    amz_date = agora.strftime("%Y%m%dT%H%M%SZ")
+    data_curta = agora.strftime("%Y%m%d")
+    regiao = "auto"
+    servico = "s3"
+    payload_hash = hashlib.sha256(b"").hexdigest()
+
+    canonical_headers = (
+        f"host:{host}\n"
+        f"x-amz-content-sha256:{payload_hash}\n"
+        f"x-amz-date:{amz_date}\n"
+    )
+    signed_headers = "host;x-amz-content-sha256;x-amz-date"
+    canonical_request = (
+        "GET\n"
+        f"{caminho_objeto}\n"
+        "\n"
+        f"{canonical_headers}\n"
+        f"{signed_headers}\n"
+        f"{payload_hash}"
+    )
+
+    credential_scope = f"{data_curta}/{regiao}/{servico}/aws4_request"
+    string_to_sign = (
+        "AWS4-HMAC-SHA256\n"
+        f"{amz_date}\n"
+        f"{credential_scope}\n"
+        + hashlib.sha256(canonical_request.encode("utf-8")).hexdigest()
+    )
+
+    k_date = _assinar_chave_r2(("AWS4" + secret_key).encode("utf-8"), data_curta)
+    k_region = _assinar_chave_r2(k_date, regiao)
+    k_service = _assinar_chave_r2(k_region, servico)
+    k_signing = _assinar_chave_r2(k_service, "aws4_request")
+    signature = hmac.new(
+        k_signing,
+        string_to_sign.encode("utf-8"),
+        hashlib.sha256,
+    ).hexdigest()
+
+    authorization = (
+        "AWS4-HMAC-SHA256 "
+        f"Credential={access_key}/{credential_scope}, "
+        f"SignedHeaders={signed_headers}, "
+        f"Signature={signature}"
+    )
+
+    request = urllib.request.Request(
+        url,
+        method="GET",
+        headers={
+            "Host": host,
+            "x-amz-content-sha256": payload_hash,
+            "x-amz-date": amz_date,
+            "Authorization": authorization,
+        },
+    )
+
+    os.makedirs(os.path.dirname(destino) or ".", exist_ok=True)
+    temporario = destino + ".part"
+
+    try:
+        with urllib.request.urlopen(request, timeout=180) as resposta, open(temporario, "wb") as saida:
+            while True:
+                bloco = resposta.read(8 * 1024 * 1024)
+                if not bloco:
+                    break
+                saida.write(bloco)
+        os.replace(temporario, destino)
+    except Exception:
+        if os.path.exists(temporario):
+            os.remove(temporario)
+        raise
+
+
+def garantir_bases_locais(forcar=False):
+    """Garante RMR.parquet e Interior.parquet no runtime do Streamlit."""
+    pares = [
+        ("RMR.parquet", ARQUIVO_RMR),
+        ("Interior.parquet", ARQUIVO_INTERIOR),
+    ]
+
+    pendentes = [
+        (nome, caminho)
+        for nome, caminho in pares
+        if forcar or not os.path.exists(caminho)
+    ]
+
+    if not pendentes:
+        return False
+
+    config = obter_config_r2()
+    if not config:
+        return False
+
+    for nome, caminho in pendentes:
+        baixar_objeto_r2(nome, caminho)
+
+    return True
+
+
+# ==========================================================
 # ESTILO
 # ==========================================================
 
@@ -39,7 +198,7 @@ st.markdown(
     """
     <style>
     /* ======================================================
-       V23 - BLACK PIANO + LOGIN + RMR/INTERIOR
+       V24 - BLACK PIANO + LOGIN + RMR/INTERIOR + R2
        ====================================================== */
 
     html, body, [class*="css"] {
@@ -1545,7 +1704,7 @@ def construir_parquet():
 
 
 # ==========================================================
-# VERIFICAR BASES
+# VERIFICAR / BAIXAR BASES
 # ==========================================================
 
 faltantes = [
@@ -1555,13 +1714,30 @@ faltantes = [
 ]
 
 if faltantes:
+    try:
+        with st.spinner("Baixando bases Pernambuco do armazenamento seguro..."):
+            garantir_bases_locais()
+    except Exception as erro:
+        st.error(
+            "Não foi possível baixar as bases Pernambuco do armazenamento seguro."
+        )
+        st.caption(f"Detalhe técnico: {erro}")
+        st.stop()
+
+    faltantes = [
+        caminho
+        for caminho in ARQUIVOS_FONTE
+        if not os.path.exists(caminho)
+    ]
+
+if faltantes:
     st.error(
         "Não encontrei todas as bases necessárias para o painel: "
         + ", ".join(f"`{caminho}`" for caminho in faltantes)
     )
     st.caption(
-        "O painel V23 utiliza simultaneamente `data/RMR.parquet` e "
-        "`data/Interior.parquet`."
+        "No Streamlit Cloud, configure o bloco `[r2]` nos Secrets. "
+        "Localmente, mantenha `data/RMR.parquet` e `data/Interior.parquet`."
     )
     st.stop()
 
@@ -1634,6 +1810,10 @@ if st.sidebar.button(
     with st.spinner(
         "Atualizando RMR + Interior..."
     ):
+        # No Streamlit Cloud, força novo download do R2.
+        # Em ambiente local sem Secrets R2, apenas reconstrói com os arquivos locais.
+        if obter_config_r2():
+            garantir_bases_locais(forcar=True)
         construir_parquet()
 
     st.success(
