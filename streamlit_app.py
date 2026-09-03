@@ -20,7 +20,7 @@ st.set_page_config(
     layout="wide",
 )
 
-APP_VERSION = "v24.2-2026-09-03"
+APP_VERSION = "v24.3-2026-09-03"
 PASTA_DADOS = "data"
 
 ARQUIVO_RMR = os.path.join(PASTA_DADOS, "RMR.parquet")
@@ -307,7 +307,7 @@ st.markdown(
     }
 
     /* ======================================================
-       V24.1 - CORREÇÃO DE CONTRASTE DOS COMPONENTES NATIVOS
+       V24.3 - TEMA NATIVO DARK + BLACK PIANO
        Mantém lógica, cálculos e integração R2 inalterados.
        ====================================================== */
 
@@ -555,142 +555,6 @@ st.markdown(
         font-size: 0.78rem;
         text-align: center;
         margin-top: 16px;
-    }
-
-
-    /* ======================================================
-       V24.2 - BLACK PIANO / CONTRASTE REFORÇADO
-       Ajuste exclusivamente visual para Streamlit 1.62+
-       ====================================================== */
-
-    /* Texto geral: evita cinza muito escuro sobre fundo preto */
-    .stApp p,
-    .stApp label,
-    .stApp small,
-    .stApp [data-testid="stMarkdownContainer"],
-    .stApp [data-testid="stMarkdownContainer"] p,
-    .stApp [data-testid="stCaptionContainer"],
-    .stApp [data-testid="stWidgetLabel"] p {
-        color: #D6D6D6 !important;
-    }
-
-    /* Mantém títulos e valores com máximo contraste */
-    .stApp h1, .stApp h2, .stApp h3, .stApp h4,
-    [data-testid="stMetricValue"],
-    [data-testid="stMetricValue"] * {
-        color: #FFFFFF !important;
-        -webkit-text-fill-color: #FFFFFF !important;
-    }
-
-    /* Labels dos cards */
-    [data-testid="stMetricLabel"],
-    [data-testid="stMetricLabel"] *,
-    [data-testid="stMetricDelta"] {
-        color: #D4D4D4 !important;
-        -webkit-text-fill-color: #D4D4D4 !important;
-    }
-
-    /* Number input: força fundo preto também nas camadas internas do BaseWeb */
-    [data-testid="stNumberInput"] [data-baseweb="input"],
-    [data-testid="stNumberInput"] [data-baseweb="input"] > div,
-    [data-testid="stNumberInput"] [data-baseweb="input"] div,
-    [data-testid="stNumberInput"] input {
-        background-color: #0B0B0B !important;
-        background: #0B0B0B !important;
-        color: #FFFFFF !important;
-        -webkit-text-fill-color: #FFFFFF !important;
-    }
-
-    [data-testid="stNumberInput"] [data-baseweb="input"] {
-        border: 1px solid rgba(255,255,255,0.22) !important;
-        box-shadow: inset 0 1px 0 rgba(255,255,255,0.04) !important;
-    }
-
-    /* Text/password inputs do login: mesma regra agressiva contra fundo branco */
-    [data-testid="stTextInput"] [data-baseweb="input"],
-    [data-testid="stTextInput"] [data-baseweb="input"] > div,
-    [data-testid="stTextInput"] [data-baseweb="input"] div,
-    [data-testid="stTextInput"] input {
-        background-color: #0B0B0B !important;
-        background: #0B0B0B !important;
-        color: #FFFFFF !important;
-        -webkit-text-fill-color: #FFFFFF !important;
-    }
-
-    [data-testid="stTextInput"] [data-baseweb="input"] {
-        border: 1px solid rgba(255,255,255,0.22) !important;
-    }
-
-    /* Select e multiselect: fecha qualquer camada clara interna */
-    [data-testid="stMultiSelect"] [data-baseweb="select"],
-    [data-testid="stMultiSelect"] [data-baseweb="select"] > div,
-    [data-testid="stSelectbox"] [data-baseweb="select"],
-    [data-testid="stSelectbox"] [data-baseweb="select"] > div {
-        background-color: #0B0B0B !important;
-        background: #0B0B0B !important;
-        color: #FFFFFF !important;
-    }
-
-    [data-testid="stMultiSelect"] input,
-    [data-testid="stSelectbox"] input {
-        background: transparent !important;
-        color: #FFFFFF !important;
-        -webkit-text-fill-color: #FFFFFF !important;
-    }
-
-    /* Navegação em radio: texto legível em todos os estados */
-    div[data-testid="stRadio"] label,
-    div[data-testid="stRadio"] label *,
-    div[data-testid="stRadio"] p,
-    div[data-testid="stRadio"] span {
-        color: #DADADA !important;
-        -webkit-text-fill-color: #DADADA !important;
-    }
-
-    div[data-testid="stRadio"] label:has(input:checked),
-    div[data-testid="stRadio"] label:has(input:checked) *,
-    div[data-testid="stRadio"] label:has(input:checked) p,
-    div[data-testid="stRadio"] label:has(input:checked) span {
-        color: #FFFFFF !important;
-        -webkit-text-fill-color: #FFFFFF !important;
-    }
-
-    /* Expander, alerts e botões: reforço de legibilidade */
-    [data-testid="stExpander"] summary,
-    [data-testid="stExpander"] summary *,
-    [data-testid="stAlert"] p,
-    .stButton button *,
-    .stDownloadButton button * {
-        color: #EAEAEA !important;
-        -webkit-text-fill-color: #EAEAEA !important;
-    }
-
-    /* Sidebar: labels e textos auxiliares */
-    [data-testid="stSidebar"] p,
-    [data-testid="stSidebar"] label,
-    [data-testid="stSidebar"] span:not([data-baseweb="tag"] span),
-    [data-testid="stSidebar"] [data-testid="stWidgetLabel"] * {
-        color: #E0E0E0 !important;
-    }
-
-    /* Login: contraste explícito */
-    .login-brand { color: #B8B8B8 !important; }
-    .login-title { color: #FFFFFF !important; }
-    .login-subtitle { color: #D0D0D0 !important; }
-    .login-footer { color: #A0A0A0 !important; }
-
-    /* Dataframe: moldura escura. O conteúdo interno segue o tema dark nativo. */
-    [data-testid="stDataFrame"] {
-        background: #080808 !important;
-        border-color: rgba(255,255,255,0.14) !important;
-    }
-
-    /* Evita que foco do navegador volte o input para branco */
-    input:focus, textarea:focus, select:focus {
-        background-color: #0B0B0B !important;
-        color: #FFFFFF !important;
-        -webkit-text-fill-color: #FFFFFF !important;
-        outline-color: rgba(255,255,255,0.28) !important;
     }
     </style>
     """,
