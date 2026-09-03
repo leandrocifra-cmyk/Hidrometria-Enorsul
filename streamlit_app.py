@@ -16,12 +16,16 @@ st.set_page_config(
     layout="wide",
 )
 
-APP_VERSION = "v22.0-2026-09-02"
-ARQUIVO_CSV = "gsan_int_gis_gnm_1.100.148.csv"
+APP_VERSION = "v23.0-2026-09-03"
 PASTA_DADOS = "data"
+
+ARQUIVO_RMR = os.path.join(PASTA_DADOS, "RMR.parquet")
+ARQUIVO_INTERIOR = os.path.join(PASTA_DADOS, "Interior.parquet")
+ARQUIVOS_FONTE = [ARQUIVO_RMR, ARQUIVO_INTERIOR]
+
 ARQUIVO_PARQUET = os.path.join(
     PASTA_DADOS,
-    "base_hidrometria_analitica_v8.parquet",
+    "base_pernambuco_analitica_v23.parquet",
 )
 
 os.makedirs(PASTA_DADOS, exist_ok=True)
@@ -35,7 +39,7 @@ st.markdown(
     """
     <style>
     /* ======================================================
-       V22 - BLACK PIANO + LOGIN
+       V23 - BLACK PIANO + LOGIN + RMR/INTERIOR
        ====================================================== */
 
     html, body, [class*="css"] {
@@ -392,7 +396,7 @@ with st.sidebar:
     if st.button(
         "Sair",
         use_container_width=True,
-        key="logout_global_v22",
+        key="logout_global_v23",
     ):
         st.session_state["autenticado"] = False
         st.session_state.pop("usuario_logado", None)
@@ -547,10 +551,13 @@ def exibir_dataframe(df, **kwargs):
 
 
 def versao_base():
-    if not os.path.exists(ARQUIVO_PARQUET):
-        return 0
-
-    return os.path.getmtime(ARQUIVO_PARQUET)
+    arquivos = [ARQUIVO_PARQUET] + ARQUIVOS_FONTE
+    mtimes = [
+        os.path.getmtime(caminho)
+        for caminho in arquivos
+        if os.path.exists(caminho)
+    ]
+    return max(mtimes) if mtimes else 0
 
 
 # ==========================================================
@@ -596,25 +603,19 @@ def consultar_linha(sql, versao):
 
 
 # ==========================================================
-# IDENTIFICAR COLUNAS DA BASE
+# IDENTIFICAR COLUNAS DAS BASES PARQUET
 # ==========================================================
 
-def identificar_colunas_csv():
+def identificar_colunas_parquet(caminho_arquivo):
     con = duckdb.connect(database=":memory:")
-    caminho = ARQUIVO_CSV.replace("'", "''")
+    caminho = caminho_arquivo.replace("'", "''")
 
     try:
         resultado = con.execute(
             f"""
             DESCRIBE
             SELECT *
-            FROM read_csv_auto(
-                '{caminho}',
-                header=true,
-                sample_size=100000,
-                ignore_errors=true,
-                null_padding=true
-            )
+            FROM read_parquet('{caminho}')
             LIMIT 1
             """
         ).fetchall()
@@ -625,18 +626,41 @@ def identificar_colunas_csv():
         con.close()
 
 
+def validar_estrutura_fontes():
+    colunas_rmr = identificar_colunas_parquet(ARQUIVO_RMR)
+    colunas_interior = identificar_colunas_parquet(ARQUIVO_INTERIOR)
+
+    if set(colunas_rmr) != set(colunas_interior):
+        somente_rmr = sorted(set(colunas_rmr) - set(colunas_interior))
+        somente_interior = sorted(set(colunas_interior) - set(colunas_rmr))
+        raise ValueError(
+            "As bases RMR e Interior possuem estruturas diferentes. "
+            f"Somente RMR: {somente_rmr[:10]}; "
+            f"Somente Interior: {somente_interior[:10]}."
+        )
+
+    return colunas_rmr
+
+
 # ==========================================================
 # CONSTRUIR PARQUET
 # ==========================================================
 
 def construir_parquet():
 
-    if not os.path.exists(ARQUIVO_CSV):
+    faltantes = [
+        caminho
+        for caminho in ARQUIVOS_FONTE
+        if not os.path.exists(caminho)
+    ]
+
+    if faltantes:
+        nomes = ", ".join(faltantes)
         raise FileNotFoundError(
-            f"Arquivo {ARQUIVO_CSV} não encontrado."
+            f"Base(s) Parquet não encontrada(s): {nomes}"
         )
 
-    colunas = identificar_colunas_csv()
+    colunas = validar_estrutura_fontes()
 
     mapa = {
         str(c).upper(): c
@@ -758,7 +782,12 @@ def construir_parquet():
         "CONTA_FATURADA"
     )
 
-    caminho_csv = ARQUIVO_CSV.replace(
+    caminho_rmr = ARQUIVO_RMR.replace(
+        "'",
+        "''"
+    )
+
+    caminho_interior = ARQUIVO_INTERIOR.replace(
         "'",
         "''"
     )
@@ -769,6 +798,9 @@ def construir_parquet():
     )
 
     con = duckdb.connect(database=":memory:")
+    con.execute("SET memory_limit='1500MB'")
+    con.execute("SET threads=2")
+    con.execute("SET preserve_insertion_order=false")
 
     sql = f"""
     COPY (
@@ -776,6 +808,13 @@ def construir_parquet():
         WITH origem AS (
 
             SELECT
+
+                CASE
+                    WHEN filename LIKE '%RMR.parquet' THEN 'RMR'
+                    WHEN filename LIKE '%Interior.parquet' THEN 'INTERIOR'
+                    ELSE 'NÃO IDENTIFICADA'
+                END
+                    AS BASE_ORIGEM,
 
                 CAST({IMOV_ID} AS VARCHAR)
                     AS MATRICULA,
@@ -1002,12 +1041,10 @@ def construir_parquet():
                 )
                     AS CONTA_FATURADA
 
-            FROM read_csv_auto(
-                '{caminho_csv}',
-                header=true,
-                sample_size=200000,
-                ignore_errors=true,
-                null_padding=true
+            FROM read_parquet(
+                ['{caminho_rmr}', '{caminho_interior}'],
+                union_by_name=true,
+                filename=true
             )
         ),
 
@@ -1508,47 +1545,54 @@ def construir_parquet():
 
 
 # ==========================================================
-# VERIFICAR BASE
+# VERIFICAR BASES
 # ==========================================================
 
-if not os.path.exists(ARQUIVO_CSV):
+faltantes = [
+    caminho
+    for caminho in ARQUIVOS_FONTE
+    if not os.path.exists(caminho)
+]
 
+if faltantes:
     st.error(
-        f"Não encontrei o arquivo `{ARQUIVO_CSV}`."
+        "Não encontrei todas as bases necessárias para o painel: "
+        + ", ".join(f"`{caminho}`" for caminho in faltantes)
     )
-
+    st.caption(
+        "O painel V23 utiliza simultaneamente `data/RMR.parquet` e "
+        "`data/Interior.parquet`."
+    )
     st.stop()
 
 
-precisa_processar = not os.path.exists(
-    ARQUIVO_PARQUET
-)
-
+precisa_processar = not os.path.exists(ARQUIVO_PARQUET)
 
 if os.path.exists(ARQUIVO_PARQUET):
-
+    origem_mais_recente = max(
+        os.path.getmtime(caminho)
+        for caminho in ARQUIVOS_FONTE
+    )
     precisa_processar = (
-        os.path.getmtime(ARQUIVO_CSV)
-        >
-        os.path.getmtime(ARQUIVO_PARQUET)
+        origem_mais_recente > os.path.getmtime(ARQUIVO_PARQUET)
     )
 
 
 if precisa_processar:
 
     st.info(
-        "Preparando a base para análise. "
-        "Esse processo ocorre apenas quando a base é nova ou atualizada."
+        "Preparando a base Pernambuco para análise a partir de RMR + Interior. "
+        "Esse processo ocorre apenas quando uma das bases é nova ou atualizada."
     )
 
-    with st.spinner("Preparando base..."):
+    with st.spinner("Preparando base Pernambuco..."):
 
         inicio = time.time()
         construir_parquet()
         tempo = time.time() - inicio
 
     st.success(
-        f"Base preparada em {tempo / 60:.1f} minuto(s)."
+        f"Base Pernambuco preparada em {tempo / 60:.1f} minuto(s)."
     )
 
     st.rerun()
@@ -1569,7 +1613,7 @@ BASE = f"read_parquet('{CAMINHO_PARQUET_SQL}')"
 # ==========================================================
 
 st.sidebar.success(
-    "✅ Base pronta para análise"
+    "✅ Base Pernambuco pronta para análise"
 )
 
 st.sidebar.caption(
@@ -1583,17 +1627,17 @@ st.sidebar.caption(
 
 
 if st.sidebar.button(
-    "🔄 Atualizar base",
+    "🔄 Atualizar base Pernambuco",
     use_container_width=True,
 ):
 
     with st.spinner(
-        "Atualizando base..."
+        "Atualizando RMR + Interior..."
     ):
         construir_parquet()
 
     st.success(
-        "Base atualizada."
+        "Base Pernambuco atualizada."
     )
 
     st.rerun()
@@ -1697,6 +1741,38 @@ st.sidebar.divider()
 st.sidebar.header("🔎 Filtros Gerais")
 
 condicoes_gerais = []
+
+
+# ==========================================================
+# BASE DE ORIGEM
+# ==========================================================
+
+bases_origem = consultar_lista(
+    f"""
+    SELECT DISTINCT BASE_ORIGEM
+    FROM {BASE}
+    WHERE
+        BASE_ORIGEM IS NOT NULL
+        AND TRIM(BASE_ORIGEM) <> ''
+    ORDER BY BASE_ORIGEM
+    """,
+    VERSAO,
+)
+
+
+filtro_base_origem = st.sidebar.multiselect(
+    "Base de Origem",
+    bases_origem,
+)
+
+
+condicao = sql_in(
+    "BASE_ORIGEM",
+    filtro_base_origem,
+)
+
+if condicao:
+    condicoes_gerais.append(condicao)
 
 
 # ==========================================================
