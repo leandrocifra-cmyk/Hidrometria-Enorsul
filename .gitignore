@@ -166,4 +166,4 @@ cython_debug/
 *.rar
 *.parquet
 *.duckdb
-data/
+data/bases_originais/
