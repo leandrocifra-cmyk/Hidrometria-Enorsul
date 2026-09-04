@@ -20,7 +20,7 @@ st.set_page_config(
     layout="wide",
 )
 
-APP_VERSION = "v24.3-2026-09-03"
+APP_VERSION = "v25.4-2026-09-04"
 PASTA_DADOS = "data"
 
 ARQUIVO_RMR = os.path.join(PASTA_DADOS, "RMR.parquet")
@@ -198,7 +198,7 @@ st.markdown(
     """
     <style>
     /* ======================================================
-       V24 - BLACK PIANO + LOGIN + RMR/INTERIOR + R2
+       V25 - BLACK PIANO + VISÃO GERAL + LOGIN + RMR/INTERIOR + R2
        ====================================================== */
 
     html, body, [class*="css"] {
@@ -1920,7 +1920,38 @@ BASE = f"read_parquet('{CAMINHO_PARQUET_SQL}')"
 
 
 # ==========================================================
-# PARÂMETROS
+# NAVEGAÇÃO PRINCIPAL — V25
+# ==========================================================
+
+# A Visão Geral passa a ser a abertura padrão do painel.
+# As áreas de Hidrômetros e Recuperação permanecem preservadas.
+area_id = st.radio(
+    "Área",
+    ["visao_geral", "hidrometros", "recuperacao"],
+    horizontal=True,
+    label_visibility="collapsed",
+    format_func=lambda opcao: (
+        "🌎 VISÃO GERAL"
+        if opcao == "visao_geral"
+        else (
+            "💧 HIDRÔMETROS"
+            if opcao == "hidrometros"
+            else "🔎 RECUPERAÇÃO DE LIGAÇÕES"
+        )
+    ),
+    key="area_principal_v25",
+)
+
+if area_id == "visao_geral":
+    area = "🌎 VISÃO GERAL"
+elif area_id == "hidrometros":
+    area = "💧 HIDRÔMETROS"
+else:
+    area = "🔎 RECUPERAÇÃO DE LIGAÇÕES"
+
+
+# ==========================================================
+# PARÂMETROS / STATUS DA BASE
 # ==========================================================
 
 st.sidebar.success(
@@ -1958,81 +1989,78 @@ if st.sidebar.button(
     st.rerun()
 
 
-st.sidebar.divider()
-st.sidebar.header("⚙️ Parâmetros")
+# A Visão Geral é factual e não depende das premissas de priorização.
+# Mantemos os valores-padrão em memória para preservar as funções/CTEs existentes,
+# mas escondemos esses controles na abertura macro.
+if area_id != "visao_geral":
 
+    st.sidebar.divider()
+    st.sidebar.header("⚙️ Parâmetros")
 
-minimo_economia = st.sidebar.number_input(
-    "Consumo mínimo por economia (m³)",
-    min_value=1.0,
-    max_value=50.0,
-    value=10.0,
-    step=1.0,
-)
+    minimo_economia = st.sidebar.number_input(
+        "Consumo mínimo por economia (m³)",
+        min_value=1.0,
+        max_value=50.0,
+        value=10.0,
+        step=1.0,
+    )
 
+    idade_prioritaria = st.sidebar.number_input(
+        "Idade para priorizar troca (anos)",
+        min_value=1,
+        max_value=30,
+        value=10,
+    )
 
-idade_prioritaria = st.sidebar.number_input(
-    "Idade para priorizar troca (anos)",
-    min_value=1,
-    max_value=30,
-    value=10,
-)
+    queda_prioritaria = st.sidebar.slider(
+        "Queda de consumo (%)",
+        min_value=10,
+        max_value=90,
+        value=30,
+        step=5,
+    )
 
+    fator_cortado = st.sidebar.slider(
+        "Faturamento do cortado (% da água)",
+        min_value=0,
+        max_value=100,
+        value=30,
+        step=5,
+        help=(
+            "Premissa configurável para estimar o "
+            "faturamento atual das ligações cortadas."
+        ),
+    )
 
-queda_prioritaria = st.sidebar.slider(
-    "Queda de consumo (%)",
-    min_value=10,
-    max_value=90,
-    value=30,
-    step=5,
-)
-
-
-fator_cortado = st.sidebar.slider(
-    "Faturamento do cortado (% da água)",
-    min_value=0,
-    max_value=100,
-    value=30,
-    step=5,
-    help=(
-        "Premissa configurável para estimar o "
-        "faturamento atual das ligações cortadas."
-    ),
-)
+else:
+    minimo_economia = 10.0
+    idade_prioritaria = 10
+    queda_prioritaria = 30
+    fator_cortado = 30
 
 
 # ==========================================================
-# ESCOLHA DA FRENTE
+# TÍTULO DINÂMICO
 # ==========================================================
 
-# A V16 usa um valor interno simples e independente do texto exibido.
-# Isso evita qualquer desencontro entre o item marcado no radio e a frente ativa.
-area_id = st.radio(
-    "Área",
-    ["hidrometros", "recuperacao"],
-    horizontal=True,
-    label_visibility="collapsed",
-    format_func=lambda opcao: (
-        "💧 HIDRÔMETROS" if opcao == "hidrometros"
-        else "🔎 RECUPERAÇÃO DE LIGAÇÕES"
-    ),
-    key="area_principal_v16",
-)
-
-# Mantém compatibilidade com toda a lógica já existente no restante do painel.
-area = (
-    "💧 HIDRÔMETROS"
-    if area_id == "hidrometros"
-    else "🔎 RECUPERAÇÃO DE LIGAÇÕES"
-)
-
-# V17: título renderizado como um único bloco dinâmico.
-if area_id == "hidrometros":
+if area_id == "visao_geral":
+    titulo_area = "VISÃO GERAL | PERNAMBUCO"
+    subtitulo_area = (
+        "Panorama macro da base comercial, situação das ligações, "
+        "consumo, faturamento e parque de hidrômetros"
+    )
+elif area_id == "hidrometros":
     titulo_area = "GESTÃO DE HIDRÔMETROS"
-    subtitulo_area = "Priorização de trocas, potencial de volume e ganho estimado de faturamento"
+    subtitulo_area = (
+        "Priorização de trocas, potencial de volume e "
+        "ganho estimado de faturamento"
+    )
 else:
     titulo_area = "RECUPERAÇÃO DE LIGAÇÕES"
-    subtitulo_area = "Identificação de inativos, indícios de uso e potencial de recuperação de faturamento"
+    subtitulo_area = (
+        "Identificação de inativos, indícios de uso e "
+        "potencial de recuperação de faturamento"
+    )
 
 st.markdown(
     f"""
@@ -2044,6 +2072,7 @@ st.markdown(
     """,
     unsafe_allow_html=True,
 )
+
 st.caption("ENORSUL | PERNAMBUCO")
 st.markdown(f"**{subtitulo_area}**")
 
@@ -2126,38 +2155,41 @@ if condicao:
 # LOCALIDADE
 # ==========================================================
 
-where_opcoes = montar_where(
-    condicoes_gerais
-)
+# Na Visão Geral, Localidade não é filtro executivo.
+# Nas áreas detalhadas, a lógica original é preservada.
+filtro_localidade = []
 
+if area_id != "visao_geral":
 
-localidades = consultar_lista(
-    f"""
-    SELECT DISTINCT LOCALIDADE
-    FROM {BASE}
-    {where_opcoes}
-    {"AND" if where_opcoes else "WHERE"}
-        LOCALIDADE IS NOT NULL
-        AND TRIM(LOCALIDADE) <> ''
-    ORDER BY LOCALIDADE
-    """,
-    VERSAO,
-)
+    where_opcoes = montar_where(
+        condicoes_gerais
+    )
 
+    localidades = consultar_lista(
+        f"""
+        SELECT DISTINCT LOCALIDADE
+        FROM {BASE}
+        {where_opcoes}
+        {"AND" if where_opcoes else "WHERE"}
+            LOCALIDADE IS NOT NULL
+            AND TRIM(LOCALIDADE) <> ''
+        ORDER BY LOCALIDADE
+        """,
+        VERSAO,
+    )
 
-filtro_localidade = st.sidebar.multiselect(
-    "Localidade",
-    localidades,
-)
+    filtro_localidade = st.sidebar.multiselect(
+        "Localidade",
+        localidades,
+    )
 
+    condicao = sql_in(
+        "LOCALIDADE",
+        filtro_localidade,
+    )
 
-condicao = sql_in(
-    "LOCALIDADE",
-    filtro_localidade,
-)
-
-if condicao:
-    condicoes_gerais.append(condicao)
+    if condicao:
+        condicoes_gerais.append(condicao)
 
 
 # ==========================================================
@@ -2202,38 +2234,40 @@ if condicao:
 # BAIRRO
 # ==========================================================
 
-where_opcoes = montar_where(
-    condicoes_gerais
-)
+# Bairro permanece disponível somente nas análises operacionais detalhadas.
+filtro_bairro = []
 
+if area_id != "visao_geral":
 
-bairros = consultar_lista(
-    f"""
-    SELECT DISTINCT BAIRRO
-    FROM {BASE}
-    {where_opcoes}
-    {"AND" if where_opcoes else "WHERE"}
-        BAIRRO IS NOT NULL
-        AND TRIM(BAIRRO) <> ''
-    ORDER BY BAIRRO
-    """,
-    VERSAO,
-)
+    where_opcoes = montar_where(
+        condicoes_gerais
+    )
 
+    bairros = consultar_lista(
+        f"""
+        SELECT DISTINCT BAIRRO
+        FROM {BASE}
+        {where_opcoes}
+        {"AND" if where_opcoes else "WHERE"}
+            BAIRRO IS NOT NULL
+            AND TRIM(BAIRRO) <> ''
+        ORDER BY BAIRRO
+        """,
+        VERSAO,
+    )
 
-filtro_bairro = st.sidebar.multiselect(
-    "Bairro",
-    bairros,
-)
+    filtro_bairro = st.sidebar.multiselect(
+        "Bairro",
+        bairros,
+    )
 
+    condicao = sql_in(
+        "BAIRRO",
+        filtro_bairro,
+    )
 
-condicao = sql_in(
-    "BAIRRO",
-    filtro_bairro,
-)
-
-if condicao:
-    condicoes_gerais.append(condicao)
+    if condicao:
+        condicoes_gerais.append(condicao)
 
 
 # ==========================================================
@@ -3546,6 +3580,729 @@ def cte_recuperacao():
 
 
 # ==========================================================
+# FORMATAÇÃO EXECUTIVA — k / M
+# ==========================================================
+
+def formatar_executivo(valor, casas=1):
+    try:
+        numero = float(valor or 0)
+    except (TypeError, ValueError):
+        numero = 0.0
+
+    absoluto = abs(numero)
+
+    if absoluto >= 1_000_000:
+        return (
+            f"{numero / 1_000_000:.{casas}f}"
+            .replace(".", ",")
+            + " M"
+        )
+
+    if absoluto >= 1_000:
+        return (
+            f"{numero / 1_000:.{casas}f}"
+            .replace(".", ",")
+            + " k"
+        )
+
+    if float(numero).is_integer():
+        return formatar_inteiro(numero)
+
+    return formatar_decimal(numero, casas)
+
+
+def formatar_moeda_executiva(valor, casas=1):
+    try:
+        numero = float(valor or 0)
+    except (TypeError, ValueError):
+        numero = 0.0
+
+    absoluto = abs(numero)
+
+    if absoluto >= 1_000_000:
+        return (
+            "R$ "
+            + f"{numero / 1_000_000:.{casas}f}".replace(".", ",")
+            + " M"
+        )
+
+    if absoluto >= 1_000:
+        return (
+            "R$ "
+            + f"{numero / 1_000:.{casas}f}".replace(".", ",")
+            + " k"
+        )
+
+    return formatar_moeda(numero)
+
+
+
+
+def formatar_volume_executivo(valor, casas=2):
+    return (
+        formatar_executivo(
+            valor,
+            casas,
+        )
+        + " m³"
+    )
+
+
+# ==========================================================
+# VISÃO GERAL — V25
+# ==========================================================
+
+if area == "🌎 VISÃO GERAL":
+
+    # A abertura usa a base completa sob os filtros macro:
+    # Base de Origem → GNM → Município → Perfil → Categoria.
+    # Nenhuma regra de score/priorização é aplicada aqui.
+    where_macro = montar_where(
+        condicoes_gerais
+    )
+
+    # CONTA_FATURADA é mantida como VARCHAR na base analítica.
+    # Para os indicadores macro, convertemos explicitamente respeitando
+    # o padrão brasileiro de milhar "." e decimal ",".
+    conta_faturada_num_sql = """
+        CASE
+            WHEN STRPOS(
+                TRIM(CAST(CONTA_FATURADA AS VARCHAR)),
+                ','
+            ) > 0
+            THEN TRY_CAST(
+                REPLACE(
+                    REPLACE(
+                        TRIM(CAST(CONTA_FATURADA AS VARCHAR)),
+                        '.',
+                        ''
+                    ),
+                    ',',
+                    '.'
+                )
+                AS DOUBLE
+            )
+            ELSE TRY_CAST(
+                TRIM(CAST(CONTA_FATURADA AS VARCHAR))
+                AS DOUBLE
+            )
+        END
+    """
+
+    resumo_macro = consultar_linha(
+        f"""
+        SELECT
+
+            COUNT(*) AS MATRICULAS,
+
+            SUM(
+                COALESCE(ECONOMIAS, 0)
+            ) AS ECONOMIAS,
+
+            SUM(
+                CASE
+                    WHEN SITUACAO = 'LIGADO'
+                    THEN 1
+                    ELSE 0
+                END
+            ) AS LIGADAS,
+
+            SUM(
+                CASE
+                    WHEN SITUACAO = 'CORTADO'
+                    THEN 1
+                    ELSE 0
+                END
+            ) AS CORTADAS,
+
+            SUM(
+                CASE
+                    WHEN SITUACAO LIKE '%SUPRIM%'
+                         AND SITUACAO NOT LIKE '%PARC%'
+                    THEN 1
+                    ELSE 0
+                END
+            ) AS SUPRIMIDAS,
+
+            SUM(
+                CASE
+                    WHEN SITUACAO LIKE 'FACT%'
+                    THEN 1
+                    ELSE 0
+                END
+            ) AS FACTIVEIS,
+
+            SUM(
+                CASE
+                    WHEN SITUACAO LIKE '%PARC%'
+                    THEN 1
+                    ELSE 0
+                END
+            ) AS SUP_PARCIAL,
+
+            SUM(
+                CASE
+                    WHEN SITUACAO = 'POTENCIAL'
+                    THEN 1
+                    ELSE 0
+                END
+            ) AS POTENCIAIS,
+
+            SUM(
+                CASE
+                    WHEN SITUACAO = 'LIGADO'
+                    THEN COALESCE(({conta_faturada_num_sql}), 0)
+                    ELSE 0
+                END
+            ) AS CONTA_ATIVA,
+
+            SUM(
+                CASE
+                    WHEN SITUACAO = 'LIGADO'
+                    THEN COALESCE(CONSUMO_FATURADO, 0)
+                    ELSE 0
+                END
+            )
+            /
+            NULLIF(
+                SUM(
+                    CASE
+                        WHEN SITUACAO = 'LIGADO'
+                        THEN 1
+                        ELSE 0
+                    END
+                ),
+                0
+            ) AS TICKET_M3,
+
+            SUM(
+                CASE
+                    WHEN SITUACAO = 'LIGADO'
+                    THEN COALESCE(({conta_faturada_num_sql}), 0)
+                    ELSE 0
+                END
+            )
+            /
+            NULLIF(
+                SUM(
+                    CASE
+                        WHEN SITUACAO = 'LIGADO'
+                        THEN 1
+                        ELSE 0
+                    END
+                ),
+                0
+            ) AS TICKET_RS,
+
+            SUM(
+                CASE
+                    WHEN SITUACAO = 'LIGADO'
+                         AND STATUS_HD = 'COM HIDRÔMETRO'
+                    THEN 1
+                    ELSE 0
+                END
+            ) AS ATIVAS_COM_HD,
+
+            SUM(
+                CASE
+                    WHEN SITUACAO = 'LIGADO'
+                         AND STATUS_HD = 'SEM HIDRÔMETRO'
+                    THEN 1
+                    ELSE 0
+                END
+            ) AS ATIVAS_SEM_HD,
+
+            SUM(
+                CASE
+                    WHEN SITUACAO = 'LIGADO'
+                         AND STATUS_HD = 'COM HIDRÔMETRO'
+                         AND IDADE_HD > 10
+                    THEN 1
+                    ELSE 0
+                END
+            ) AS HD_MAIS_10,
+
+            SUM(
+                CASE
+                    WHEN SITUACAO = 'LIGADO'
+                         AND (
+                             COALESCE(LEITURA_UPPER, '') LIKE '%PARADO%'
+                             OR COALESCE(CONSUMO_UPPER, '') LIKE '%PARADO%'
+                         )
+                    THEN 1
+                    ELSE 0
+                END
+            ) AS HD_PARADO,
+
+            SUM(
+                CASE
+                    WHEN SITUACAO = 'LIGADO'
+                         AND COALESCE(CONSUMO_FATURADO, 0) = 0
+                    THEN 1
+                    ELSE 0
+                END
+            ) AS CONSUMO_ZERO,
+
+            SUM(
+                CASE
+                    WHEN SITUACAO = 'LIGADO'
+                         AND COALESCE(CONSUMO_FATURADO, 0) > 0
+                         AND COALESCE(CONSUMO_FATURADO, 0) <= 5
+                    THEN 1
+                    ELSE 0
+                END
+            ) AS BAIXO_CONSUMO
+
+        FROM {BASE}
+        {where_macro}
+        """,
+        VERSAO,
+    )
+
+    (
+        matriculas,
+        economias,
+        ligadas,
+        cortadas,
+        suprimidas,
+        factiveis,
+        sup_parcial,
+        potenciais,
+        conta_ativa,
+        ticket_m3,
+        ticket_rs,
+        ativas_com_hd,
+        ativas_sem_hd,
+        hd_mais_10,
+        hd_parado,
+        consumo_zero,
+        baixo_consumo,
+    ) = resumo_macro
+
+    ligadas_base = float(ligadas or 0)
+
+    hidrometracao_ativa = (
+        float(ativas_com_hd or 0)
+        / ligadas_base
+        * 100
+        if ligadas_base > 0
+        else 0
+    )
+
+    pct_sem_hd = (
+        float(ativas_sem_hd or 0)
+        / ligadas_base
+        * 100
+        if ligadas_base > 0
+        else 0
+    )
+
+    economias_por_matricula = (
+        float(economias or 0)
+        / float(matriculas or 0)
+        if float(matriculas or 0) > 0
+        else 0
+    )
+
+    # Contexto dos filtros sem transformar a abertura em consulta cadastral.
+    contexto_macro = []
+
+    if filtro_base_origem:
+        contexto_macro.append(
+            "Base: " + ", ".join(map(str, filtro_base_origem))
+        )
+
+    if filtro_gnm:
+        contexto_macro.append(
+            "GNM: " + ", ".join(map(str, filtro_gnm))
+        )
+
+    if filtro_municipio:
+        contexto_macro.append(
+            "Município: " + ", ".join(map(str, filtro_municipio))
+        )
+
+    if filtro_perfil:
+        contexto_macro.append(
+            "Perfil: " + ", ".join(map(str, filtro_perfil))
+        )
+
+    if filtro_categoria:
+        contexto_macro.append(
+            "Categoria: " + ", ".join(map(str, filtro_categoria))
+        )
+
+    if contexto_macro:
+        st.caption(
+            "Visão filtrada | " + " • ".join(contexto_macro)
+        )
+    else:
+        st.caption(
+            "Visão consolidada de Pernambuco | RMR + Interior"
+        )
+
+
+    # ------------------------------------------------------
+    # 1. BASE GERAL
+    # ------------------------------------------------------
+
+    st.subheader("Panorama da Base")
+
+    c1, c2, c3, c4, c5 = st.columns(5)
+
+    c1.metric(
+        "Ligações",
+        formatar_executivo(matriculas, 2),
+    )
+
+    c2.metric(
+        "Economias",
+        formatar_executivo(economias, 2),
+    )
+
+    c3.metric(
+        "Economias por Ligação",
+        formatar_decimal(economias_por_matricula, 2),
+    )
+
+    c4.metric(
+        "Ligações ativas",
+        formatar_executivo(ligadas, 2),
+    )
+
+    c5.metric(
+        "Faturamento das Ligações Ativas",
+        formatar_moeda_executiva(conta_ativa, 1),
+    )
+
+
+    # ------------------------------------------------------
+    # 2. SITUAÇÃO DAS LIGAÇÕES
+    # ------------------------------------------------------
+
+    st.subheader("Situação das Ligações")
+
+    s1, s2, s3, s4, s5, s6 = st.columns(6)
+
+    s1.metric(
+        "Ligações Ativas",
+        formatar_executivo(ligadas, 1),
+    )
+
+    s2.metric(
+        "Ligações Cortadas",
+        formatar_executivo(cortadas, 1),
+    )
+
+    s3.metric(
+        "Ligações Suprimidas",
+        formatar_executivo(suprimidas, 1),
+    )
+
+    s4.metric(
+        "Ligações Factíveis",
+        formatar_executivo(factiveis, 1),
+    )
+
+    s5.metric(
+        "Supressão Parcial",
+        formatar_executivo(sup_parcial, 1),
+    )
+
+    s6.metric(
+        "Ligações Potenciais",
+        formatar_executivo(potenciais, 1),
+    )
+
+    df_situacao = consultar_df(
+        f"""
+        WITH situacao_normalizada AS (
+            SELECT
+                CASE
+                    WHEN SITUACAO = 'LIGADO'
+                    THEN 'Ligação Ativa'
+
+                    WHEN SITUACAO = 'CORTADO'
+                    THEN 'Ligação Cortada'
+
+                    WHEN SITUACAO LIKE '%PARC%'
+                    THEN 'Supressão Parcial'
+
+                    WHEN SITUACAO LIKE '%SUPRIM%'
+                    THEN 'Ligação Suprimida'
+
+                    WHEN SITUACAO LIKE 'FACT%'
+                    THEN 'Ligação Factível'
+
+                    WHEN SITUACAO = 'POTENCIAL'
+                    THEN 'Ligação Potencial'
+
+                    ELSE 'Outras'
+                END AS "Situação"
+            FROM {BASE}
+            {where_macro}
+        )
+
+        SELECT
+            "Situação",
+            COUNT(*) AS "Ligações",
+            ROUND(
+                COUNT(*) * 100.0
+                / NULLIF(
+                    SUM(COUNT(*)) OVER (),
+                    0
+                ),
+                1
+            ) AS "Percentual (%)"
+        FROM situacao_normalizada
+        GROUP BY 1
+        ORDER BY
+            CASE "Situação"
+                WHEN 'Ligação Ativa' THEN 1
+                WHEN 'Ligação Cortada' THEN 2
+                WHEN 'Ligação Suprimida' THEN 3
+                WHEN 'Ligação Factível' THEN 4
+                WHEN 'Supressão Parcial' THEN 5
+                WHEN 'Ligação Potencial' THEN 6
+                ELSE 7
+            END
+        """,
+        VERSAO,
+    )
+
+    exibir_dataframe(
+        df_situacao,
+        use_container_width=True,
+        hide_index=True,
+    )
+
+
+    # ------------------------------------------------------
+    # 3. CONSUMO E FATURAMENTO
+    # ------------------------------------------------------
+
+    st.subheader("Consumo e Faturamento")
+
+    f1, f2, f3, f4 = st.columns(4)
+
+    f1.metric(
+        "Consumo médio por Ligação",
+        f"{formatar_decimal(ticket_m3, 2)} m³",
+    )
+
+    f2.metric(
+        "Faturamento médio por Ligação",
+        formatar_moeda(ticket_rs),
+    )
+
+    f3.metric(
+        "Consumo zero",
+        formatar_executivo(consumo_zero, 1),
+    )
+
+    f4.metric(
+        "Baixo consumo 1–5 m³",
+        formatar_executivo(baixo_consumo, 1),
+    )
+
+    df_consumo_macro = consultar_df(
+        f"""
+        SELECT
+            CASE
+                WHEN COALESCE(CONSUMO_FATURADO, 0) = 0
+                THEN '0'
+
+                WHEN CONSUMO_FATURADO <= 5
+                THEN '1–5'
+
+                WHEN CONSUMO_FATURADO <= 10
+                THEN '6–10'
+
+                WHEN CONSUMO_FATURADO <= 20
+                THEN '11–20'
+
+                WHEN CONSUMO_FATURADO <= 30
+                THEN '21–30'
+
+                WHEN CONSUMO_FATURADO <= 50
+                THEN '31–50'
+
+                ELSE '>50'
+            END AS "Faixa de consumo",
+            COUNT(*) AS "Ligações"
+        FROM {BASE}
+        {where_macro}
+        {"AND" if where_macro else "WHERE"}
+            SITUACAO = 'LIGADO'
+        GROUP BY 1
+        ORDER BY
+            CASE "Faixa de consumo"
+                WHEN '0' THEN 1
+                WHEN '1–5' THEN 2
+                WHEN '6–10' THEN 3
+                WHEN '11–20' THEN 4
+                WHEN '21–30' THEN 5
+                WHEN '31–50' THEN 6
+                ELSE 7
+            END
+        """,
+        VERSAO,
+    )
+
+    if not df_consumo_macro.empty:
+        st.bar_chart(
+            df_consumo_macro.set_index("Faixa de consumo"),
+            use_container_width=True,
+        )
+
+
+    # ------------------------------------------------------
+    # 4. PARQUE DE HIDRÔMETROS
+    # ------------------------------------------------------
+
+    st.subheader("Parque de Hidrômetros")
+
+    h1, h2, h3, h4 = st.columns(4)
+
+    h1.metric(
+        "Hidrometração ativa",
+        formatar_percentual(
+            hidrometracao_ativa,
+            1,
+        ),
+    )
+
+    h2.metric(
+        "Ligações Ativas sem HD",
+        formatar_executivo(
+            ativas_sem_hd,
+            1,
+        ),
+        delta=(
+            formatar_percentual(
+                pct_sem_hd,
+                1,
+            )
+            + " das ativas"
+        ),
+        delta_color="off",
+    )
+
+    h3.metric(
+        "HD > 10 anos",
+        formatar_executivo(
+            hd_mais_10,
+            1,
+        ),
+    )
+
+    h4.metric(
+        "HD parado",
+        formatar_executivo(
+            hd_parado,
+            1,
+        ),
+    )
+
+    df_idade_macro = consultar_df(
+        f"""
+        SELECT
+            CASE
+                WHEN IDADE_HD IS NULL
+                THEN 'Sem idade'
+
+                WHEN IDADE_HD <= 5
+                THEN '0–5'
+
+                WHEN IDADE_HD <= 10
+                THEN '6–10'
+
+                WHEN IDADE_HD <= 15
+                THEN '11–15'
+
+                WHEN IDADE_HD <= 20
+                THEN '16–20'
+
+                WHEN IDADE_HD <= 30
+                THEN '21–30'
+
+                ELSE '>30'
+            END AS "Faixa de idade",
+            COUNT(*) AS "Hidrômetros"
+        FROM {BASE}
+        {where_macro}
+        {"AND" if where_macro else "WHERE"}
+            SITUACAO = 'LIGADO'
+            AND STATUS_HD = 'COM HIDRÔMETRO'
+        GROUP BY 1
+        ORDER BY
+            CASE "Faixa de idade"
+                WHEN '0–5' THEN 1
+                WHEN '6–10' THEN 2
+                WHEN '11–15' THEN 3
+                WHEN '16–20' THEN 4
+                WHEN '21–30' THEN 5
+                WHEN '>30' THEN 6
+                ELSE 7
+            END
+        """,
+        VERSAO,
+    )
+
+    if not df_idade_macro.empty:
+        st.bar_chart(
+            df_idade_macro.set_index("Faixa de idade"),
+            use_container_width=True,
+        )
+
+    st.caption(
+        "A Visão Geral apresenta fatos da base. "
+        "Scores, ganho estimado e modelos de priorização permanecem "
+        "nas áreas de Hidrômetros e Recuperação de Ligações."
+    )
+
+    st.divider()
+
+    st.markdown("### Pontos de Atenção")
+
+    p1, p2, p3, p4 = st.columns(4)
+
+    p1.metric(
+        "Ligações Ativas sem HD",
+        formatar_executivo(
+            ativas_sem_hd,
+            1,
+        ),
+    )
+
+    p2.metric(
+        "HD parado",
+        formatar_executivo(
+            hd_parado,
+            1,
+        ),
+    )
+
+    p3.metric(
+        "HD > 10 anos",
+        formatar_executivo(
+            hd_mais_10,
+            1,
+        ),
+    )
+
+    p4.metric(
+        "Ligações Cortadas",
+        formatar_executivo(
+            cortadas,
+            1,
+        ),
+    )
+
+
+
+
+# ==========================================================
 # HIDRÔMETROS
 # ==========================================================
 
@@ -3888,38 +4645,56 @@ if area == "💧 HIDRÔMETROS":
 
 
         c1.metric(
-            "Hidrômetros Analisados",
-            formatar_inteiro(resumo[0])
+            "HDs Analisados",
+            formatar_executivo(
+                resumo[0],
+                2,
+            )
         )
 
         c2.metric(
-            "Prioritários para Recuperação",
-            formatar_inteiro(resumo[1])
+            "HDs Prioritários",
+            formatar_executivo(
+                resumo[1],
+                1,
+            )
         )
 
         c3.metric(
-            "Recuperação Prioritária (%)",
+            "Recup. Prioritária",
             formatar_percentual(resumo[2])
         )
 
         c4.metric(
             "Muito Alta",
-            formatar_inteiro(resumo[3])
+            formatar_executivo(
+                resumo[3],
+                1,
+            )
         )
 
         c5.metric(
             "Alta",
-            formatar_inteiro(resumo[4])
+            formatar_executivo(
+                resumo[4],
+                1,
+            )
         )
 
         c6.metric(
             "Volume Estimado",
-            formatar_volume(resumo[5])
+            formatar_volume_executivo(
+                resumo[5],
+                2,
+            )
         )
 
         c7.metric(
-            "Ganho Estimado / mês",
-            formatar_moeda(resumo[6])
+            "Ganho Estimado",
+            formatar_moeda_executiva(
+                resumo[6],
+                2,
+            )
         )
 
 
@@ -4001,12 +4776,30 @@ if area == "💧 HIDRÔMETROS":
 
         s1, s2, s3, s4, s5, s6 = st.columns(6)
 
-        s1.metric("Trocas Selecionadas", formatar_inteiro(sim_hd[0]))
-        s2.metric("Volume Estimado / mês", formatar_volume(sim_hd[1]))
-        s3.metric("Ganho Estimado / mês", formatar_moeda(sim_hd[2]))
-        s4.metric("Ganho Médio / troca", formatar_moeda(sim_hd[3]))
-        s5.metric("Muito Alta", formatar_inteiro(sim_hd[4]))
-        s6.metric("Alta", formatar_inteiro(sim_hd[5]))
+        s1.metric(
+            "Trocas Selecionadas",
+            formatar_executivo(sim_hd[0], 1),
+        )
+        s2.metric(
+            "Volume Estimado",
+            formatar_volume_executivo(sim_hd[1], 2),
+        )
+        s3.metric(
+            "Ganho Estimado",
+            formatar_moeda_executiva(sim_hd[2], 2),
+        )
+        s4.metric(
+            "Ganho Médio / Troca",
+            formatar_moeda(sim_hd[3]),
+        )
+        s5.metric(
+            "Muito Alta",
+            formatar_executivo(sim_hd[4], 1),
+        )
+        s6.metric(
+            "Alta",
+            formatar_executivo(sim_hd[5], 1),
+        )
 
         st.caption(
             "Seleção recomendada = melhores oportunidades dentro dos filtros atuais. "
@@ -5385,7 +6178,7 @@ if area == "💧 HIDRÔMETROS":
 # RECUPERAÇÃO DE LIGAÇÕES
 # ==========================================================
 
-else:
+elif area == "🔎 RECUPERAÇÃO DE LIGAÇÕES":
 
     tela = st.radio(
         "Visão",
@@ -5639,51 +6432,58 @@ else:
 
 
         c1.metric(
-            "Casos para Análise",
-            formatar_inteiro(
-                resumo[0]
+            "Casos p/ Análise",
+            formatar_executivo(
+                resumo[0],
+                1,
             )
         )
 
         c2.metric(
             "Ligações Inativas",
-            formatar_inteiro(
-                resumo[1]
+            formatar_executivo(
+                resumo[1],
+                1,
             )
         )
 
         c3.metric(
-            "Inativos com Consumo",
-            formatar_inteiro(
-                resumo[2]
+            "Inativas c/ Consumo",
+            formatar_executivo(
+                resumo[2],
+                1,
             )
         )
 
         c4.metric(
             "Prioridade Crítica",
-            formatar_inteiro(
-                resumo[3]
+            formatar_executivo(
+                resumo[3],
+                1,
             )
         )
 
         c5.metric(
             "Prioridade Alta",
-            formatar_inteiro(
-                resumo[4]
+            formatar_executivo(
+                resumo[4],
+                1,
             )
         )
 
         c6.metric(
-            "Volume Estimado / mês",
-            formatar_volume(
-                resumo[5]
+            "Volume Estimado",
+            formatar_volume_executivo(
+                resumo[5],
+                2,
             )
         )
 
         c7.metric(
-            "Incremento Estimado / mês",
-            formatar_moeda(
-                resumo[6]
+            "Incremento Estimado",
+            formatar_moeda_executiva(
+                resumo[6],
+                2,
             )
         )
 
@@ -5742,12 +6542,30 @@ else:
 
         r1, r2, r3, r4, r5, r6 = st.columns(6)
 
-        r1.metric("Fiscalizações Selecionadas", formatar_inteiro(sim_rec[0]))
-        r2.metric("Prioridade Crítica", formatar_inteiro(sim_rec[1]))
-        r3.metric("Prioridade Alta", formatar_inteiro(sim_rec[2]))
-        r4.metric("Volume Estimado / mês", formatar_volume(sim_rec[3]))
-        r5.metric("Incremento Estimado / mês", formatar_moeda(sim_rec[4]))
-        r6.metric("Média / fiscalização", formatar_moeda(sim_rec[5]))
+        r1.metric(
+            "Fiscalizações Selecionadas",
+            formatar_executivo(sim_rec[0], 1),
+        )
+        r2.metric(
+            "Prioridade Crítica",
+            formatar_executivo(sim_rec[1], 1),
+        )
+        r3.metric(
+            "Prioridade Alta",
+            formatar_executivo(sim_rec[2], 1),
+        )
+        r4.metric(
+            "Volume Estimado",
+            formatar_volume_executivo(sim_rec[3], 2),
+        )
+        r5.metric(
+            "Incremento Estimado",
+            formatar_moeda_executiva(sim_rec[4], 2),
+        )
+        r6.metric(
+            "Média / Fiscalização",
+            formatar_moeda(sim_rec[5]),
+        )
 
         st.caption(
             "Seleção recomendada = melhores casos dentro dos filtros atuais. "
